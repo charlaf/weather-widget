@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weather Widget</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: transparent; padding: 1rem; }
+
+:root {
+  --bg: #fff;
+  --bg2: #f3f4f6;
+  --bg3: #e5e7eb;
+  --text: #111827;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --accent: #2563eb;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #1c1c1e; --bg2: #2c2c2e; --bg3: #3a3a3c; --text: #f2f2f7; --muted: #98989f; --border: #38383a; }
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 1.25rem;
+  align-items: flex-end;
+}
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+input[type="text"], input[type="date"], select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+  padding: 7px 10px;
+  outline: none;
+  height: 36px;
+}
+input[type="text"] { width: 180px; }
+input[type="date"] { width: 155px; }
+select { width: 80px; }
+input:focus, select:focus { border-color: var(--accent); }
+
+.date-row { display: flex; gap: 6px; align-items: center; }
+.date-row + .date-row { margin-top: 6px; }
+
+.btn {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  height: 36px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--bg2); }
+.btn-remove {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 4px;
+}
+.btn-remove:hover { color: #dc2626; }
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.btn-primary:hover { background: #1d4ed8; }
+
+.results { display: flex; flex-direction: column; gap: 12px; }
+
+.card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+}
+.card-city { font-size: 16px; font-weight: 500; color: var(--text); }
+.card-date { font-size: 12px; color: var(--muted); margin-top: 2px; margin-bottom: 1rem; }
+.card-main { display: flex; align-items: center; gap: 14px; margin-bottom: .875rem; }
+.card-icon { font-size: 44px; line-height: 1; }
+.card-hi { font-size: 26px; font-weight: 500; color: var(--text); }
+.card-lo { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.card-desc { font-size: 14px; color: var(--text); margin-top: 3px; }
+.card-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.stat { background: var(--bg2); border-radius: 7px; padding: .625rem; text-align: center; }
+.stat-label { font-size: 10px; color: var(--muted); margin-bottom: 3px; text-transform: uppercase; letter-spacing: .04em; }
+.stat-val { font-size: 14px; font-weight: 500; color: var(--text); }
+.card-error { font-size: 13px; color: #dc2626; padding: .25rem 0; }
+.card-loading { font-size: 13px; color: var(--muted); padding: .25rem 0; }
+
+.share-box {
+  margin-top: 1.25rem;
+  background: var(--bg2);
+  border-radius: var(--radius);
+  padding: .875rem 1rem;
+}
+.share-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+.share-url {
+  font-size: 12px;
+  color: var(--text);
+  font-family: monospace;
+  word-break: break-all;
+  margin-bottom: 8px;
+}
+</style>
+</head>
+<body>
+
+<div class="controls" id="controls">
+  <div class="field">
+    <label>City</label>
+    <input type="text" id="cityInput" placeholder="e.g. New York City" />
+  </div>
+  <div class="field">
+    <label>Unit</label>
+    <select id="unitSelect">
+      <option value="f">°F</option>
+      <option value="c">°C</option>
+    </select>
+  </div>
+</div>
+
+<div id="dateRows" style="margin-bottom:1rem;">
+  <div class="date-row">
+    <input type="date" class="date-input" />
+    <button class="btn-remove" onclick="removeRow(this)" title="Remove">×</button>
+  </div>
+</div>
+
+<div id="actions" style="display:flex;gap:8px;margin-bottom:1.5rem;">
+  <button class="btn" onclick="addDateRow()">+ Add date</button>
+  <button class="btn btn-primary" onclick="runSearch()">Get weather</button>
+</div>
+
+<div class="results" id="results"></div>
+
+<div class="share-box" id="shareBox" style="display:none">
+  <div class="share-label">Embed URL</div>
+  <div class="share-url" id="shareUrl"></div>
+  <button class="btn" onclick="copyUrl()">Copy URL</button>
+</div>
+
+<script>
+const WMO_DESC = {
+  0:'Clear sky',1:'Mainly clear',2:'Partly cloudy',3:'Overcast',
+  45:'Foggy',48:'Icy fog',51:'Light drizzle',53:'Drizzle',55:'Heavy drizzle',
+  61:'Light rain',63:'Rain',65:'Heavy rain',71:'Light snow',73:'Snow',75:'Heavy snow',
+  77:'Snow grains',80:'Light showers',81:'Showers',82:'Heavy showers',
+  85:'Snow showers',86:'Heavy snow showers',95:'Thunderstorm',
+  96:'Thunderstorm + hail',99:'Heavy thunderstorm + hail'
+};
+const WMO_ICON = {
+  0:'☀️',1:'🌤',2:'⛅',3:'☁️',45:'🌫',48:'🌫',51:'🌦',53:'🌦',55:'🌧',
+  61:'🌧',63:'🌧',65:'🌧',71:'❄️',73:'❄️',75:'❄️',77:'❄️',80:'🌦',81:'🌦',
+  82:'🌧',85:'🌨',86:'🌨',95:'⛈',96:'⛈',99:'⛈'
+};
+
+let geoCache = {};
+
+function addDateRow(val) {
+  const wrap = document.getElementById('dateRows');
+  const row = document.createElement('div');
+  row.className = 'date-row';
+  row.innerHTML = `<input type="date" class="date-input" value="${val||''}" /><button class="btn-remove" onclick="removeRow(this)" title="Remove">×</button>`;
+  wrap.appendChild(row);
+}
+
+function removeRow(btn) {
+  const rows = document.querySelectorAll('.date-row');
+  if (rows.length <= 1) { btn.closest('.date-row').querySelector('input').value = ''; return; }
+  btn.closest('.date-row').remove();
+}
+
+async function geocode(city) {
+  if (geoCache[city]) return geoCache[city];
+  const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1`);
+  const j = await res.json();
+  if (!j.results?.length) throw new Error(`City not found: "${city}"`);
+  geoCache[city] = j.results[0];
+  return j.results[0];
+}
+
+async function fetchDay(lat, lon, date, useFahrenheit) {
+  const today = new Date().toISOString().slice(0, 10);
+  const base = date < today
+    ? 'https://archive-api.open-meteo.com/v1/archive'
+    : 'https://api.open-meteo.com/v1/forecast';
+  const tu = useFahrenheit ? 'fahrenheit' : 'celsius';
+  const res = await fetch(`${base}?latitude=${lat}&longitude=${lon}&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&start_date=${date}&end_date=${date}&temperature_unit=${tu}`);
+  return res.json();
+}
+
+function cardHtml(geo, date, wx, useFahrenheit) {
+  const d = wx.daily;
+  if (!d?.weathercode?.length) return `<div class="card-error">No data available for this date.</div>`;
+  const code = d.weathercode[0];
+  const hi = Math.round(d.temperature_2m_max[0]);
+  const lo = Math.round(d.temperature_2m_min[0]);
+  const rainChance = d.precipitation_probability_max?.[0] != null ? d.precipitation_probability_max[0] + '%' : 'N/A';
+  const ts = useFahrenheit ? '°F' : '°C';
+  const label = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
+  return `
+    <div class="card-city">${geo.name}, ${geo.country}</div>
+    <div class="card-date">${label}</div>
+    <div class="card-main">
+      <div class="card-icon">${WMO_ICON[code]||'🌡'}</div>
+      <div>
+        <div class="card-hi">${hi}${ts}</div>
+        <div class="card-lo">Low ${lo}${ts}</div>
+        <div class="card-desc">${WMO_DESC[code]||'Unknown'}</div>
+      </div>
+    </div>
+    <div class="card-stats" style="grid-template-columns:1fr">
+      <div class="stat"><div class="stat-label">Chance of rain</div><div class="stat-val">${rainChance}</div></div>
+    </div>`;
+}
+
+async function runSearch() {
+  const city = document.getElementById('cityInput').value.trim();
+  const units = document.getElementById('unitSelect').value;
+  const useFahrenheit = units !== 'c';
+  const dates = [...document.querySelectorAll('.date-input')].map(i => i.value).filter(Boolean);
+
+  if (!city) { alert('Please enter a city.'); return; }
+  if (!dates.length) { alert('Please enter at least one date.'); return; }
+
+  const results = document.getElementById('results');
+  results.innerHTML = '';
+
+  const placeholders = dates.map((date, i) => {
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.innerHTML = `<div class="card-loading">Loading ${date}…</div>`;
+    results.appendChild(div);
+    return div;
+  });
+
+  let geo;
+  try { geo = await geocode(city); }
+  catch (e) {
+    placeholders.forEach(p => { p.innerHTML = `<div class="card-error">${e.message}</div>`; });
+    return;
+  }
+
+  await Promise.all(dates.map(async (date, i) => {
+    try {
+      const wx = await fetchDay(geo.latitude, geo.longitude, date, useFahrenheit);
+      placeholders[i].innerHTML = cardHtml(geo, date, wx, useFahrenheit);
+    } catch (e) {
+      placeholders[i].innerHTML = `<div class="card-error">Failed to load data for ${date}.</div>`;
+    }
+  }));
+
+  const shareBox = document.getElementById('shareBox');
+  const shareUrl = document.getElementById('shareUrl');
+  const base = window.location.origin + window.location.pathname;
+  const url = `${base}?city=${encodeURIComponent(city)}&dates=${dates.join(',')}&units=${units}`;
+  shareUrl.textContent = url;
+  shareBox.style.display = 'block';
+}
+
+function copyUrl() {
+  navigator.clipboard.writeText(document.getElementById('shareUrl').textContent)
+    .then(() => alert('URL copied!'));
+}
+
+function loadFromParams() {
+  const p = new URLSearchParams(window.location.search);
+  const city = p.get('city');
+  const dates = p.get('dates') || p.get('date');
+  const units = p.get('units') || 'f';
+  if (!city || !dates) return;
+
+  document.getElementById('cityInput').value = city;
+  document.getElementById('unitSelect').value = units;
+  const dateList = dates.split(',').map(s => s.trim()).filter(Boolean);
+  const wrap = document.getElementById('dateRows');
+  wrap.innerHTML = '';
+  dateList.forEach(d => addDateRow(d));
+
+  document.getElementById('controls').style.display = 'none';
+  document.getElementById('dateRows').style.display = 'none';
+  document.getElementById('actions').style.display = 'none';
+  document.getElementById('shareBox').style.display = 'none';
+
+  runSearch();
+}
+
+loadFromParams();
+</script>
+</body>
+</html>
